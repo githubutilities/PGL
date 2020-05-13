@@ -210,7 +210,7 @@ class GraphsageModel(object):
 
         graph_wrapper = pgl.graph_wrapper.GraphWrapper(
             "sub_graph", node_feat=[('feats', [None, 602], np.dtype('float32'))])
-        loss, model_acc = build_graph_model(
+        loss, acc = build_graph_model(
             graph_wrapper,
             num_class=args.num_class,
             hidden_size=args.hidden_size,
@@ -221,5 +221,6 @@ class GraphsageModel(object):
 
         self.graph_wrapper = graph_wrapper
         self.loss = loss
+        self.acc = acc
         return loss
 

@@ -114,33 +114,37 @@ def fake_py_reader(data_iter, num):
             yield queue
     return fake_iter
 
-def train_prog(exe, program, loss, pyreader, args):
+def train_prog(exe, program, model, pyreader, args):
     trainer_id = int(os.getenv("PADDLE_TRAINER_ID", "0"))
     start = time.time()
     batch = 0
-    for step, batch_feed_dict in enumerate(pyreader()):
-        try:
-            cpu_time = time.time()
-            batch += 1
-            batch_loss  = exe.run(
-                program,
-                feed=batch_feed_dict,
-                fetch_list=[loss])
+    total_loss = 0.
+    total_acc = 0.
+    total_sample = 0
+    for epoch_idx in range(args.num_epoch):
+        for step, batch_feed_dict in enumerate(pyreader()):
+            try:
+                cpu_time = time.time()
+                batch += 1
+                batch_loss, batch_acc  = exe.run(
+                    program,
+                    feed=batch_feed_dict,
+                    fetch_list=[model.loss, model.acc])
 
-            end = time.time()
-            if batch % args.log_per_step == 0:
-                log.info(
-                    "Batch %s Loss %s \t Speed(per batch) %.5lf/%.5lf sec"
-                    % (batch, np.mean(batch_loss), (end - start) /batch, (end - cpu_time)))
+                end = time.time()
+                if batch % args.log_per_step == 0:
+                    log.info(
+                        "Batch %s Loss %s Acc %s \t Speed(per batch) %.5lf/%.5lf sec"
+                        % (batch, np.mean(batch_loss), np.mean(batch_acc), (end - start) /batch, (end - cpu_time)))
 
-            if step % args.steps_per_save == 0:
-                save_path = args.save_path
-                if trainer_id == 0:
-                    model_path = os.path.join(save_path, "%s" % step)
-                    fleet.save_persistables(exe, model_path)
-        except Exception as e:
-            log.info("Pyreader train error")
-            log.exception(e)
+                if step % args.steps_per_save == 0:
+                    save_path = args.save_path
+                    if trainer_id == 0:
+                        model_path = os.path.join(save_path, "%s" % step)
+                        fleet.save_persistables(exe, model_path)
+            except Exception as e:
+                log.info("Pyreader train error")
+                log.exception(e)
 
 def main(args):
     log.info("start")
@@ -174,7 +178,7 @@ def main(args):
         log.info("Startup done")
 
         compiled_prog = build_complied_prog(fleet.main_program, loss)
-        train_prog(exe, compiled_prog, loss, pyreader, args)
+        train_prog(exe, compiled_prog, model, pyreader, args)
 
 
 if __name__ == '__main__':
